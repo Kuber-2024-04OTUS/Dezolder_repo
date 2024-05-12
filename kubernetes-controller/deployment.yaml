@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+  namespace: homework
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      nodeSelector:
+        homework: "true"
+      volumes:
+        - name: workdir
+          emptyDir: {}
+      initContainers:
+        - name: init-webpage
+          image: busybox
+          command:
+            ["sh", "-c", 'echo "Welcome to our website!" > /init/index.html']
+          volumeMounts:
+            - name: workdir
+              mountPath: /init
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          command: ["sh", "-c", "cat /homework/index.html; tail -f /dev/null"]
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: workdir
+              mountPath: /homework
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "rm -f /homework/index.html"]
+          readinessProbe:
+            exec:
+              command:
+                - cat
+                - /homework/index.html
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
