@@ -10,12 +10,14 @@ kubectl label node minikube homework=true
 
 # Apply homework manifests
 kubectl apply -f namespace.yaml &&
+kubectl apply -f cm.yaml &&
+kubectl apply -f pvc.yaml 
 kubectl apply -f deployment.yaml &&
 kubectl apply -f service.yaml &&
 kubectl apply -f ingress.yaml &&
 
 # Enable minikube ingress
-minikube addons enable ingress &&
+# minikube addons enable ingress &&
 
 # sleep 30
 
@@ -32,13 +34,17 @@ sleep 20
 
 # Test the service in a second terminal:
 curl http://homework.otus/homepage | grep "Welcome to our website!" --color
+curl http://homework.otus/conf/key | grep "value" --color
+
 
 # Expected output:
 # Welcome to our website!
+# value
 
 # Cleanup
-minikube addons disable ingress &&
-kubectl delete -f ingress.yaml &&
-kubectl delete -f service.yaml &&
-kubectl delete -f deployment.yaml &&
-kubectl delete -f namespace.yaml
+# minikube addons disable ingress &&
+# kubectl delete -f ingress.yaml &&
+# kubectl delete -f service.yaml &&
+# kubectl delete -f deployment.yaml &&
+# kubectl delete -f namespace.yaml &&
+# kubectl label node minikube homework-

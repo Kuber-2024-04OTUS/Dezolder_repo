@@ -25,6 +25,11 @@ spec:
       volumes:
         - name: workdir
           emptyDir: {}
+          # persistentVolumeClaim:
+          #   claimName: nginx-pvc
+        - name: config-volume
+          configMap:
+            name: myapp-config
       initContainers:
         - name: init-webpage
           image: busybox
@@ -48,6 +53,9 @@ spec:
           volumeMounts:
             - name: workdir
               mountPath: /homework
+            - name: config-volume
+              mountPath: /homework/conf
+              readOnly: true
           lifecycle:
             preStop:
               exec:
