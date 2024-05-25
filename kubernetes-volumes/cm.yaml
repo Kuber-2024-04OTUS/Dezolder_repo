@@ -5,3 +5,4 @@ metadata:
   namespace: homework
 data:
   key: value
+  foo: bar

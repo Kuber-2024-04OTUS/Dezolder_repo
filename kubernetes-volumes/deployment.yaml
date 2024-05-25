@@ -24,9 +24,9 @@ spec:
         homework: "true"
       volumes:
         - name: workdir
-          emptyDir: {}
-          # persistentVolumeClaim:
-          #   claimName: nginx-pvc
+          # emptyDir: {}
+          persistentVolumeClaim:
+            claimName: nginx-pvc
         - name: config-volume
           configMap:
             name: myapp-config
