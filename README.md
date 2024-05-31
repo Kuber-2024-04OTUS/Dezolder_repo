@@ -1,37 +1,137 @@
 # Репозиторий для выполнения домашних заданий курса "Инфраструктурная платформа на основе Kubernetes-2024-02" 
 
 ### ДЗ №3 Services
-https://cdn.otus.ru/media/public/98/6d/%D0%94%D0%97_3___%D0%A1%D0%B5%D1%82%D0%B5%D0%B2%D0%BE%D0%B5_%D0%B2%D0%B7%D0%B0%D0%B8%D0%BC%D0%BE%D0%B4%D0%B5%D0%B8_%D1%81%D1%82%D0%B2%D0%B8%D0%B5_Pod__%D1%81%D0%B5%D1%80%D0%B2%D0%B8%D1%81%D1%8B.pptx-73510-986dc1.pdf
-#### httpGet:
-Настроен nginx через команду в Deployment манифесте:
-```yaml 
-          command: ["/bin/sh", "-c"]
-          args:
-            - echo 'server { listen 8000; location / { root /homework; index index.html;} }' > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'
+https://cdn.otus.ru/media/public/7e/f4/%D0%94%D0%97_4___Volumes__StorageClass__PV__PVC_.pptx-73510-7ef4d2.pdf
+
+### 1
+Создан манифест PersistentVolumeClaim pvc.yaml, c storageClass по-умолчанию:
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nginx-pvc
+  namespace: homework
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
 ```
-
-#### Настроен Service NodePort:
-Слушает на порту 8000
-
-#### Настроен Ingress:
-Манифест + Minikube Ingress Controller
-
-Слушает на порту 80
-
-#### Резолюция host:
-На своём компьютере добавил запись в C:\Windows\System32\drivers\etc\hosts:
-(Под Windows нужно запускать Notepad от имени администратора)
-```bash
-127.0.0.1 homework.otus
+### 2 
+Меняю Манифест Deployment на использование PVC:
+```yaml
+      volumes:
+        - name: workdir
+          # emptyDir: {}
+          persistentVolumeClaim:
+            claimName: nginx-pvc
 ```
-
-#### Проброс туннеля на localhost:
-```bash 
-minikube tunnel
+### 3
+Создаю ConfigMap:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: homework
+data:
+  key: value
+  foo: bar
+```
+### 4
+Меняю Манифест Deployment на использование ConfigMap:
+```yaml
+      volumes:
+        - name: workdir
+          # emptyDir: {}
+          persistentVolumeClaim:
+            claimName: nginx-pvc
+        - name: config-volume
+          configMap:
+            name: myapp-config
+```
+### 5
+Обновляю точки монтирования (PVC и CM) в основном контейнере:
+```yaml
+          volumeMounts:
+            - name: workdir
+              mountPath: /homework
+            - name: config-volume
+              mountPath: /homework/conf
+              readOnly: true
+```
+### 6
+Добавляю новый Ingress для пути /conf/key:
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: conf-ingress
+  # annotations:
+  #   nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - host: "homework.otus"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/conf"
+        # path: "/conf(/key|$)"
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
 ``` 
 
+
+### 7 (Задание со *)
+Создаю файл storageClass.yaml:
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nginx-storage-class
+  namespace: homework
+provisioner: 'k8s.io/minikube-hostpath'
+reclaimPolicy: Retain
+```
+### 8
+Обновляю PVC на использование своего storageClass:
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nginx-pvc
+  namespace: homework
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nginx-storage-class
+```
+
+
+
+
+### 
+Запускаю свой скрипт:
+```bash
+bash bash.sh
+```
+Вывод скрипта примерно такой:
+
+![alt text](pic/image.png)
+
+Этот Вывод содержит ответ от сервера по пути: ```/homepage``` и ```/conf/key```.
+
+А также содержит вывод команды ```kubectl get pvc -n homework```, в котором видно, что после удаления Deployment - PV всё равно остаётся (что обусловлено RECLAIM POLICY: Retain).
+
 #### Рефлексия:
-1) Три дня разбирался с httpGet и настройкой nginx в контейнере. 
-2) Долго не мог понять, почему не работает Ingress. Оказалось, что нужно было использовать Minikube Tunnel (Вместо Minikube service nginx-service ).
-3) Для удобства добавил bash скрипт для запуска всех манифестов. Очень удобно! )))
-4) Понял, что нужно больше практики и больше времени на выполнение заданий, хотя кажется что всё просто.
+1) Настройка Ingress на rewrite-target со множеством путей всё ещё вызвает турдности.
+2) Важно различать какие объекты Kubernetes являются уровня Namespace, а какие уровня Cluster.
