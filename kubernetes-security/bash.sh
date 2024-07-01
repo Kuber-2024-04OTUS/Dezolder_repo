@@ -55,7 +55,7 @@ curl http://homework.otus/metrics.html
 SECRET_NAME=$(kubectl get serviceaccount cd -n homework -o jsonpath='{.secrets[0].name}')
 
 # Получите токен и CA из секрета
-TOKEN=$(kubectl get secret $SECRET_NAME -n homework -o jsonpath='{.data.token}')
+TOKEN=$(kubectl get secret $SECRET_NAME -n homework -o jsonpath='{.data.token}' | base64 --decode)
 CA=$(kubectl get secret $SECRET_NAME -n homework -o jsonpath='{.data.ca\.crt}' )
 
 # Получите адрес сервера Kubernetes
@@ -69,7 +69,7 @@ cat > cd.kubeconfig <<EOF
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority-data: >-
+    certificate-authority-data: 
       $CA
     server: $SERVER
   name: minikube
@@ -85,7 +85,7 @@ preferences: {}
 users:
 - name: cd
   user:
-    token: >-
+    token:  
       $TOKEN
 EOF
 
