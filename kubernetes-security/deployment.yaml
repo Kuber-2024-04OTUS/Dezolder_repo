@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+  namespace: homework
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      serviceAccountName: monitoring
+      nodeSelector:
+        homework: "true"
+      volumes:
+        - name: workdir
+          # emptyDir: {}
+          persistentVolumeClaim:
+            claimName: nginx-pvc
+        - name: config-volume
+          configMap:
+            name: myapp-config
+        - name: my-secret-volume
+          secret:
+            secretName: my-secret-token
+      initContainers:
+        - name: init-webpage
+          image: busybox
+          command:
+            ["sh", "-c", 'echo "Welcome to our website!" > /init/index.html']
+          volumeMounts:
+            - name: workdir
+              mountPath: /init
+      containers:
+        - name: nginx
+          image: nginx:latest
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: workdir
+              mountPath: /homework
+            - name: config-volume
+              mountPath: /homework/conf
+              readOnly: true
+            - name: my-secret-volume
+              mountPath: /homework/secret
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "rm -f /homework/index.html /homework/error_nginx.txt /homework/error_nginx_daemon.txt /homework/error_echo1.txt /homework/error_echo2.txt /homework/metrics /homework/error.txt"]
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              KUBEAPI="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}" &&
+              SA=/var/run/secrets/kubernetes.io/serviceaccount &&
+              CACERT=${SA}/ca.crt &&
+              TOKEN=$(cat ${SA}/token) &&
+              NAMESPACE=$(cat ${SA}/namespace) &&
+              POD_NAME=${HOSTNAME} &&
+              # curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET "${KUBEAPI}/apis/metrics.k8s.io/v1beta1/namespaces/${NAMESPACE}/pods/${POD_NAME}" -o /homework/metrics 2> /homework/error.txt && 
+              curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET "${KUBEAPI}/apis/metrics.k8s.io/v1beta1/nodes/minikube" -o /homework/metrics.html 2> /homework/error.txt && 
+              echo "Metrics fetched!" 2> /homework/error_echo2.txt &&
+              echo ${POD_NAME} >> /homework/metrics.html &&
+              echo 'server { listen 8000; location / { root /homework; index index.html;} location /metrics { root /homework; index metrics;} }' > /etc/nginx/conf.d/default.conf 2> /homework/error_nginx.txt && 
+              nginx -g 'daemon off;' 2> /homework/error_nginx_daemon.txt &&
+              echo "Nginx started!" 2> /homework/error_echo1.txt 
+            
+            # - env KUBEAPI="https://kubernetes.default.svc" && \ 
+            #   SA="/var/run/secrets/kubernetes.io/serviceaccount" &&\
+            #   CACERT="${SA}/ca.crt && TOKEN=$(cat ${SA}/token)" && \
+            #   curl '--cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET ${KUBEAPI}/metrics | head -10 > /homework/metrics && echo "Metrics fetched!"'
+
+            # - SA=/var/run/secrets/kubernetes.io/serviceaccount
+            # - CACERT=${SA}/ca.crt
+            # - TOKEN=$(cat ${SA}/token)
+            # - 'curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET ${KUBEAPI}/metrics | head -10 > /homework/metrics && echo "Metrics fetched!"'
